@@ -1,68 +1,50 @@
-import { useEffect, useRef, useState } from 'react'
-import { usePaystackPayment } from 'react-paystack'
-import { Crown, Lock, Play, Loader as Loader2, X, CircleCheck as CheckCircle2, Ticket } from 'lucide-react'
-import { config, CURRENCIES, isPaystackConfigured } from '../config'
+import { useState } from 'react'
+import { Play, Loader2, X, Ticket, Gift, Sparkles } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { addCredit } from '../services/creditService'
 
-function RewardAdButton({ onReward, toast, disabled, isProUser }) {
+function RewardAdButton({ onReward, toast, disabled, user }) {
   const [watching, setWatching] = useState(false)
-  const [countdown, setCountdown] = useState(3)
-  const intervalRef = useRef(null)
-  const rewardTimeoutRef = useRef(null)
-
-  useEffect(() => () => {
-    clearInterval(intervalRef.current)
-    clearTimeout(rewardTimeoutRef.current)
-  }, [])
 
   async function startReward() {
-    if (disabled || isProUser || watching) return
+    if (disabled || watching) return
+
     setWatching(true)
-    setCountdown(3)
+    toast.info('Opening ad link...')
 
-    intervalRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(intervalRef.current)
-          intervalRef.current = null
-          return 0
+    // Open Monetag ad link/zone in a new tab or trigger ad container
+    const adUrl = import.meta.env.VITE_MONETAG_ZONE_ID 
+      ? `https://your-monetag-ad-link.com/?zone=${import.meta.env.VITE_MONETAG_ZONE_ID}` 
+      : '#'
+
+    // Open the ad for the user
+    window.open(adUrl, '_blank')
+
+    // Simulate completion and award credit after user interacts
+    setTimeout(async () => {
+      try {
+        const ok = await addCredit(1)
+        if (ok) {
+          toast.success('Reward earned! +1 scan credit added.')
+          onReward()
+        } else {
+          toast.error('Could not grant reward. Please try again.')
         }
-        return prev - 1
-      })
-    }, 1000)
-
-    rewardTimeoutRef.current = setTimeout(async () => {
-      rewardTimeoutRef.current = null
-      const ok = await addCredit(1)
-      if (ok) {
-        toast.success('Reward earned! +1 scan credit added.')
-        onReward()
-      } else {
-        toast.error('Could not grant reward. Please try again.')
+      } catch (err) {
+        console.error('Error granting credit:', err)
+        toast.error('An error occurred while granting your reward.')
+      } finally {
+        setWatching(false)
       }
-      setWatching(false)
-    }, 3000)
-  }
-
-  if (isProUser) {
-    return (
-      <div className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 font-medium">
-        <Crown size={16} />
-        Pro access active
-      </div>
-    )
+    }, 4000)
   }
 
   if (watching) {
     return (
-      <button
-        disabled
-        className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-green-50 border border-green-200 text-green-700 font-medium"
-      >
-        <Loader2 size={18} className="animate-spin" />
-        Watching ad... {countdown}s
-      </button>
+      <div className="w-full py-4 px-5 rounded-2xl bg-emerald-600 text-white font-semibold shadow-md flex items-center justify-center gap-3 cursor-not-allowed opacity-90">
+        <Loader2 size={20} className="animate-spin" />
+        <span>Verifying ad view...</span>
+      </div>
     )
   }
 
@@ -70,10 +52,20 @@ function RewardAdButton({ onReward, toast, disabled, isProUser }) {
     <button
       onClick={startReward}
       disabled={disabled}
-      className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 font-medium hover:bg-slate-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      className="w-full group relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 p-4 text-white shadow-lg hover:shadow-xl hover:from-emerald-700 hover:to-teal-700 transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between"
     >
-      <Play size={16} />
-      Watch Ad (+1 Credit)
+      <div className="flex items-center gap-3.5 text-left">
+        <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-white flex-shrink-0 shadow-inner">
+          <Play size={22} className="fill-current ml-0.5" />
+        </div>
+        <div>
+          <div className="font-bold text-lg leading-tight">Watch Ad / Visit Sponsor</div>
+          <div className="text-emerald-100 text-xs mt-0.5 font-medium">Earn +1 free scan credit instantly</div>
+        </div>
+      </div>
+      <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white group-hover:translate-x-1 transition-transform">
+        →
+      </div>
     </button>
   )
 }
@@ -81,81 +73,11 @@ function RewardAdButton({ onReward, toast, disabled, isProUser }) {
 function PaywallModal({
   open,
   onClose,
-  currency,
   user,
-  isProUser,
-  onRequestAuth,
   onCreditGranted,
-  onPaymentSuccess,
   onOpenPromoCode,
   toast,
 }) {
-  const [paying, setPaying] = useState(false)
-  const cur = CURRENCIES[currency] || CURRENCIES.USD
-
-  const configPaystack = {
-    reference: `stq-${Date.now()}`,
-    email: user?.email || 'guest@snaptoquiz.app',
-    amount: cur.subunit,
-    currency: cur.code,
-    publicKey: config.PAYSTACK_PUBLIC_KEY,
-    text: `Upgrade to Pro — ${cur.symbol}${cur.amount}`,
-    metadata: {
-      custom_fields: [
-        {
-          display_name: 'User ID',
-          variable_name: 'supabase_user_id',
-          value: user?.id || '',
-        },
-        {
-          display_name: 'Email',
-          variable_name: 'supabase_email',
-          value: user?.email || '',
-        },
-      ],
-    },
-  }
-
-  const onSuccess = async (_) => {
-    setPaying(false)
-    toast.success('Payment received! Your Pro subscription is now active for 1 month.')
-    onClose()
-    onPaymentSuccess?.()
-  }
-
-  const onClosePaystack = () => {
-    setPaying(false)
-  }
-
-  const initializePayment = usePaystackPayment(configPaystack)
-
-  async function handlePay() {
-    if (!supabase) {
-      toast.info('Please sign in or create an account before checking out.')
-      onRequestAuth()
-      return
-    }
-
-    const { data, error } = await supabase.auth.getSession()
-    const sessionUser = data?.session?.user
-
-    if (error || !sessionUser || !user?.id || sessionUser.id !== user.id) {
-      setPaying(false)
-      toast.info('Please sign in or create an account before checking out.')
-      onRequestAuth()
-      return
-    }
-
-    if (!isPaystackConfigured()) {
-      toast.info(
-        'Paystack is in test mode. Add your Paystack public key to enable real payments.'
-      )
-      return
-    }
-    setPaying(true)
-    initializePayment(onSuccess, onClosePaystack)
-  }
-
   if (!open) return null
 
   return (
@@ -164,84 +86,71 @@ function PaywallModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl max-w-md w-full shadow-2xl animate-scale-in overflow-hidden"
+        className="bg-white rounded-3xl max-w-md w-full shadow-2xl animate-scale-in overflow-hidden border border-slate-100"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 pt-5 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
-              <Crown size={20} className="text-white" />
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-7 pt-6 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-500/20">
+              <Gift size={22} className="text-white" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900">Upgrade to Pro</h3>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-1.5">
+                Get Free Credits <Sparkles size={16} className="text-emerald-500" />
+              </h3>
+              <p className="text-xs text-slate-500">Choose an option below to add credits</p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-500"
+            className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-400 hover:text-slate-700"
             aria-label="Close"
           >
             <X size={20} />
           </button>
         </div>
 
-        <div className="px-6 pb-6 space-y-5">
-          <div className="text-center py-4">
-            <div className="text-4xl font-bold text-slate-900">
-              {cur.symbol}{cur.amount}
-              <span className="text-lg font-normal text-slate-500"> /month</span>
-            </div>
-            <p className="text-sm text-slate-500 mt-1">300 AI scans per month, no ads</p>
+        {/* Modal Body */}
+        <div className="p-7 space-y-4">
+          {/* Watch Ad Action */}
+          <RewardAdButton
+            onReward={onCreditGranted}
+            toast={toast}
+            user={user}
+          />
+
+          <div className="relative flex py-1 items-center">
+            <div className="flex-grow border-t border-slate-100"></div>
+            <span className="flex-shrink mx-3 text-slate-400 text-xs uppercase tracking-wider font-medium">or</span>
+            <div className="flex-grow border-t border-slate-100"></div>
           </div>
 
-          <div className="space-y-2.5">
-            {[
-              '300 photo-to-quiz scans per month',
-              'No advertisements anywhere',
-              'Unlimited flashcards & quizzes',
-              'Export and copy study materials',
-              'Priority AI processing',
-            ].map((feature) => (
-              <div key={feature} className="flex items-center gap-2.5">
-                <CheckCircle2 size={18} className="text-green-600 flex-shrink-0" />
-                <span className="text-sm text-slate-700">{feature}</span>
-              </div>
-            ))}
-          </div>
-
+          {/* Promo Code Action */}
           <button
-            onClick={handlePay}
-            disabled={paying}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-semibold hover:from-amber-600 hover:to-amber-700 transition-all shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
+            onClick={onOpenPromoCode}
+            className="w-full group relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white shadow-lg hover:shadow-xl hover:from-indigo-700 hover:to-purple-700 transition-all active:scale-[0.99] flex items-center justify-between"
           >
-            {paying ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <Lock size={18} />
-                Pay {cur.symbol}{cur.amount} {cur.code} via Paystack
-              </>
-            )}
+            <div className="flex items-center gap-3.5 text-left">
+              <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-white flex-shrink-0 shadow-inner">
+                <Ticket size={22} />
+              </div>
+              <div>
+                <div className="font-bold text-lg leading-tight">Have a Promo Code?</div>
+                <div className="text-indigo-100 text-xs mt-0.5 font-medium">Redeem code for instant credits</div>
+              </div>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white group-hover:translate-x-1 transition-transform">
+              →
+            </div>
           </button>
+        </div>
 
-          <div className="pt-2 border-t border-slate-100 space-y-3">
-            <button
-              onClick={onOpenPromoCode}
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-green-50 border border-green-200 text-green-700 font-medium hover:bg-green-100 transition-colors"
-            >
-              <Ticket size={16} />
-              Have a Promo Code?
-            </button>
-            <p className="text-xs text-center text-slate-400">
-              Or earn a free credit without paying
-            </p>
-            <RewardAdButton
-              onReward={onCreditGranted}
-              toast={toast}
-              isProUser={isProUser}
-            />
-          </div>
+        {/* Footer Note */}
+        <div className="px-7 py-4 bg-slate-50 border-t border-slate-100 text-center">
+          <p className="text-xs text-slate-500 font-medium">
+            Keep scanning and learning with SnapToQuiz ✨
+          </p>
         </div>
       </div>
     </div>
