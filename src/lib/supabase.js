@@ -1,17 +1,20 @@
-import { createClient } from '@supabase/supabase-js'
-import { config, isSupabaseConfigured } from '../config'
+import { createClient } from '@supabase/supabase-js';
+import 'react-native-url-polyfill/auto';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CONFIG, isSupabaseConfigured } from '../config/env';
 
-let client = null
+let client = null;
 
 if (isSupabaseConfigured()) {
-  client = createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
+  client = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
     auth: {
-      persistSession: true,
+      storage: AsyncStorage,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      persistSession: true,
+      detectSessionInUrl: false,
     },
-  })
+  });
 }
 
-export const supabase = client
-export const supabaseAvailable = isSupabaseConfigured()
+export const supabase = client;
+export const supabaseAvailable = isSupabaseConfigured();

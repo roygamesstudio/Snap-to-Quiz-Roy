@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "PhotoQuizzer",
+    "slug": "photoquizzer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.photoquizzer.app"
+    },
+    "android": {
+      "package": "com.photoquizzer.app",
+      "versionCode": 1,
+      "permissions": ["INTERNET", "ACCESS_NETWORK_STATE"]
+    },
+    "plugins": [
+      [
+        "react-native-applovin-max",
+        {
+          "sdkKey": "process.env.EXPO_PUBLIC_APPLOVIN_SDK_KEY || ''"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PhotoQuizzer needs access to your photos to scan your study materials.",
+          "cameraPermission": "PhotoQuizzer needs camera access to take photos of your study materials."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "photoquizzer"
+      }
+    }
+  }
+}

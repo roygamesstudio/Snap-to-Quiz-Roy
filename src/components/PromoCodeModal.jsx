@@ -1,118 +1,238 @@
-import { useState } from 'react'
-import { Ticket, Loader as Loader2, X, CircleCheck as CheckCircle2, CircleAlert as AlertCircle } from 'lucide-react'
-import { redeemPromoCode } from '../services/creditService'
+import React, { useState } from 'react';
+import {
+  Modal,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../context/ThemeContext';
+import { redeemPromoCode } from '../services/creditService';
 
-export function PromoCodeModal({ open, onClose, onRedeemed, toast }) {
-  const [code, setCode] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState(null)
+export default function PromoCodeModal({ visible, onClose, onRedeemed, toast }) {
+  const { theme } = useTheme();
+  const [code, setCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
 
-  if (!open) return null
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!code.trim() || loading) return
-    setLoading(true)
-    setResult(null)
-    const res = await redeemPromoCode(code)
-    setLoading(false)
+  async function handleSubmit() {
+    if (!code.trim() || loading) return;
+    setLoading(true);
+    setResult(null);
+    const res = await redeemPromoCode(code);
+    setLoading(false);
 
     if (res?.success) {
-      setResult({ success: true, credits: res.credits_awarded })
-      toast.success(`Promo code applied! +${res.credits_awarded} scan credits added.`)
-      onRedeemed?.()
+      setResult({ success: true, credits: res.credits_awarded });
+      toast.success(`Promo code applied! +${res.credits_awarded} credits added.`);
+      if (onRedeemed) await onRedeemed();
       setTimeout(() => {
-        setCode('')
-        setResult(null)
-        onClose()
-      }, 2500)
+        setCode('');
+        setResult(null);
+        onClose();
+      }, 2500);
     } else {
-      setResult({ success: false, error: res?.error || 'Could not redeem promo code.' })
+      setResult({
+        success: false,
+        error:
+          res?.error ||
+          'This promo code is invalid or does not exist. Please check the code and try again.',
+      });
     }
   }
 
   function handleClose() {
-    setCode('')
-    setResult(null)
-    onClose()
+    setCode('');
+    setResult(null);
+    onClose();
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-      onClick={handleClose}
-    >
-      <div
-        className="bg-white rounded-2xl max-w-md w-full shadow-2xl animate-scale-in overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-6 pt-5 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
-              <Ticket size={20} className="text-white" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900">Redeem Promo Code</h3>
-          </div>
-          <button
-            onClick={handleClose}
-            className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-500"
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
-        </div>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
+        <View style={[styles.modal, { backgroundColor: theme.card }]}>
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <View style={[styles.iconCircle, { backgroundColor: theme.successLight }]}>
+                <Ionicons name="ticket-outline" size={20} color={theme.success} />
+              </View>
+              <Text style={[styles.title, { color: theme.text }]}>Redeem Promo Code</Text>
+            </View>
+            <TouchableOpacity onPress={handleClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={20} color={theme.textMuted} />
+            </TouchableOpacity>
+          </View>
 
-        <div className="px-6 pb-6 space-y-4">
-          <p className="text-sm text-slate-500 text-center">
-            Enter a promo code to receive bonus scan credits.
-          </p>
+          <View style={styles.body}>
+            <Text style={[styles.description, { color: theme.textSecondary }]}>
+              Enter a promo code to receive bonus scan credits.
+            </Text>
 
-          {result?.success && (
-            <div className="flex items-center gap-2 rounded-xl bg-green-50 border border-green-200 px-4 py-3 animate-fade-in">
-              <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
-              <p className="text-sm text-green-800 font-medium">
-                {result.credits} credits added to your account!
-              </p>
-            </div>
-          )}
+            {result?.success && (
+              <View style={[styles.successBox, { backgroundColor: theme.successLight, borderColor: theme.success }]}>
+                <Ionicons name="checkmark-circle" size={20} color={theme.success} />
+                <Text style={[styles.successText, { color: theme.success }]}>
+                  {result.credits} credits added to your account!
+                </Text>
+              </View>
+            )}
 
-          {result && !result.success && (
-            <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-200 px-4 py-3 animate-fade-in">
-              <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-800">{result.error}</p>
-            </div>
-          )}
+            {result && !result.success && (
+              <View style={[styles.errorBox, { backgroundColor: theme.errorLight, borderColor: theme.error }]}>
+                <Ionicons name="alert-circle" size={20} color={theme.error} />
+                <Text style={[styles.errorText, { color: theme.error }]}>
+                  {result.error}
+                </Text>
+              </View>
+            )}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <input
-              type="text"
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChangeText={(text) => setCode(text.toUpperCase())}
               placeholder="Enter promo code"
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all text-slate-900 text-center text-lg font-medium tracking-wider uppercase"
-              disabled={loading}
-              autoFocus
+              placeholderTextColor={theme.textMuted}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              editable={!loading}
+              textAlign="center"
             />
-            <button
-              type="submit"
+
+            <TouchableOpacity
+              style={[styles.submitButton, { backgroundColor: theme.success }]}
+              onPress={handleSubmit}
               disabled={loading || !code.trim()}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-green-600 text-white font-semibold hover:from-green-600 hover:to-green-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  Redeeming...
-                </>
+                <View style={styles.submitContent}>
+                  <ActivityIndicator size="small" color="#FFF" />
+                  <Text style={styles.submitText}>Redeeming...</Text>
+                </View>
               ) : (
-                <>
-                  <Ticket size={18} />
-                  Redeem Code
-                </>
+                <View style={styles.submitContent}>
+                  <Ionicons name="ticket-outline" size={18} color="#FFF" />
+                  <Text style={styles.submitText}>Redeem Code</Text>
+                </View>
               )}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
-  )
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 }
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  modal: {
+    width: '100%',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  body: {
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    gap: 14,
+  },
+  description: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  successBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  successText: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  errorText: {
+    fontSize: 14,
+    flex: 1,
+    lineHeight: 20,
+  },
+  input: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    letterSpacing: 2,
+  },
+  submitButton: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  submitText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});

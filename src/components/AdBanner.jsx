@@ -1,70 +1,74 @@
-import { useEffect, useRef } from 'react'
-import { config, isAdsterraConfigured } from '../config'
+import React from 'react';
+import { View, StyleSheet, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  getBannerAdUnitId,
+  isBannerConfigured,
+  getBannerPosition,
+  AppLovinMAX,
+} from '../services/adService';
+import { useTheme } from '../context/ThemeContext';
 
-function getScriptUrl() {
-  return config.ADSTERRA_SCRIPT_URL.replace(
-    '{ZONE_ID}',
-    encodeURIComponent(config.ADSTERRA_KEY),
-  )
-}
+export default function AdBanner() {
+  const { theme } = useTheme();
 
-function loadAdsterraScript(container) {
-  const existingScript = container.querySelector('script[data-adsterra-script]')
-  if (existingScript) return Promise.resolve()
+  if (!isBannerConfigured() || !AppLovinMAX) {
+    return (
+      <View style={[styles.placeholder, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.placeholderInner}>
+          <View style={[styles.placeholderBadge, { backgroundColor: theme.primaryLight }]}>
+            <View style={[styles.placeholderText, { backgroundColor: theme.primary }]} />
+          </View>
+        </View>
+      </View>
+    );
+  }
 
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.async = true
-    script.src = getScriptUrl()
-    script.dataset.adsterraScript = 'true'
-    script.dataset.zoneId = config.ADSTERRA_KEY
-    script.addEventListener('load', resolve, { once: true })
-    script.addEventListener('error', reject, { once: true })
-    container.appendChild(script)
-  })
+  const position = getBannerPosition();
+  const AdView = AppLovinMAX.AdView;
 
-}
-
-export default function AdBanner({ className = '' }) {
-  const insRef = useRef(null)
-  const adsEnabled = isAdsterraConfigured()
-
-  useEffect(() => {
-    if (!adsEnabled || !insRef.current) return undefined
-
-    let active = true
-
-    loadAdsterraScript(insRef.current).catch(() => {
-      if (active) insRef.current?.classList.add('ad-load-failed')
-    })
-
-    return () => {
-      active = false
-    }
-  }, [adsEnabled])
+  if (!AdView) return null;
 
   return (
-    <div
-      ref={insRef}
-      className={`ad-container min-h-[90px] overflow-hidden ${className}`}
-      data-ad-network="adsterra"
-      data-zone-id={config.ADSTERRA_KEY || undefined}
-      aria-label="Advertisement"
-    >
-      {!adsEnabled && (
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-100 to-slate-50 border border-slate-200">
-          <div className="flex items-center justify-center py-4 px-6">
-            <div className="text-center">
-              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-medium mb-0.5">
-                Sponsored
-              </p>
-              <p className="text-sm text-slate-500">
-                Ad Space (Test Mode)
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+    <SafeAreaView edges={position === 'top' ? ['top'] : ['bottom']} style={{ backgroundColor: theme.surface }}>
+      <View style={styles.bannerContainer}>
+        <AdView
+          adUnitId={getBannerAdUnitId()}
+          adFormat="banner"
+          placement={position}
+          style={styles.banner}
+        />
+      </View>
+    </SafeAreaView>
+  );
 }
+
+const styles = StyleSheet.create({
+  placeholder: {
+    height: 60,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  placeholderInner: {
+    alignItems: 'center',
+  },
+  placeholderBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  placeholderText: {
+    width: 120,
+    height: 8,
+    borderRadius: 4,
+  },
+  bannerContainer: {
+    width: '100%',
+  },
+  banner: {
+    width: '100%',
+    height: Platform.OS === 'ios' ? 60 : 50,
+  },
+});

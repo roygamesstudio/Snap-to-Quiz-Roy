@@ -1,72 +1,74 @@
-import { supabase, supabaseAvailable } from '../lib/supabase'
-
-async function getAuthenticatedUser() {
-  if (!supabaseAvailable || !supabase) return null
-  const { data, error } = await supabase.auth.getUser()
-  if (error || !data?.user) return null
-  return data.user
-}
+import { supabase, supabaseAvailable } from '../lib/supabase';
 
 export async function getProfileState() {
-  if (!supabaseAvailable || !supabase) return null
-  const { data, error } = await supabase.rpc('get_profile_state')
-  if (error) return null
-  return data
+  if (!supabaseAvailable || !supabase) return null;
+  const { data, error } = await supabase.rpc('get_profile_state');
+  if (error) return null;
+  return data;
 }
 
 export async function getCredits() {
-  const state = await getProfileState()
-  if (!state) return 0
-  return state.scans_remaining ?? 0
+  const state = await getProfileState();
+  if (!state) return 0;
+  return state.credits ?? 0;
 }
 
-export async function getProExpirationDate() {
-  const state = await getProfileState()
-  if (!state || state.tier !== 'pro') return null
-  return state.pro_expires_at ?? null
-}
-
-export async function isPro() {
-  const state = await getProfileState()
-  return Boolean(state && state.tier === 'pro')
+export async function isPremium() {
+  const state = await getProfileState();
+  return Boolean(state && state.is_premium);
 }
 
 export async function deductCredit() {
-  if (!supabaseAvailable || !supabase) return false
-  const { data, error } = await supabase.rpc('consume_profile_scan')
-  if (error) return false
-  return Boolean(data)
+  if (!supabaseAvailable || !supabase) return false;
+  const { data, error } = await supabase.rpc('consume_profile_credit');
+  if (error) return false;
+  return Boolean(data);
 }
 
 export async function addCredit(amount = 1) {
-  if (!supabaseAvailable || !supabase) return false
-  const { data, error } = await supabase.rpc('add_profile_scans', {
+  if (!supabaseAvailable || !supabase) return false;
+  const { data, error } = await supabase.rpc('add_profile_credits', {
     credit_amount: amount,
-  })
-  if (error) return false
-  return Boolean(data)
+  });
+  if (error) return false;
+  return Boolean(data);
 }
 
 export async function refundCredit() {
-  if (!supabaseAvailable || !supabase) return false
-  const { data, error } = await supabase.rpc('refund_profile_credit')
-  if (error) return false
-  return Boolean(data)
+  if (!supabaseAvailable || !supabase) return false;
+  const { data, error } = await supabase.rpc('refund_profile_credit');
+  if (error) return false;
+  return Boolean(data);
 }
 
 export async function redeemPromoCode(code) {
   if (!supabaseAvailable || !supabase) {
-    return { success: false, error: 'Database is not configured.' }
+    return { success: false, error: 'Database is not configured.' };
   }
-  const user = await getAuthenticatedUser()
-  if (!user) {
-    return { success: false, error: 'You must be signed in to redeem a promo code.' }
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData?.user) {
+    return { success: false, error: 'You must be signed in to redeem a promo code.' };
   }
   const { data, error } = await supabase.rpc('redeem_promo_code', {
     code_text: code.trim(),
-  })
+  });
   if (error) {
-    return { success: false, error: error.message }
+    return {
+      success: false,
+      error:
+        'This promo code is invalid or does not exist. Please check the code and try again.',
+    };
   }
-  return data
+  return data;
+}
+
+export async function getAppConfig() {
+  if (!supabaseAvailable || !supabase) return null;
+  const { data, error } = await supabase
+    .from('app_config')
+    .select('is_active,title,message,target_url')
+    .eq('id', 1)
+    .maybeSingle();
+  if (error) return null;
+  return data;
 }

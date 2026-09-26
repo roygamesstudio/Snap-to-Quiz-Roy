@@ -1,179 +1,222 @@
-import { useRef, useState } from 'react'
-import { UploadCloud, Camera, ImageIcon, Loader2, X, Sparkles } from 'lucide-react'
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { useTheme } from '../context/ThemeContext';
 
-const ACCEPTED = ['image/jpeg', 'image/png', 'image/jpg']
-const MAX_SIZE = 10 * 1024 * 1024
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result
-      const commaIdx = result.indexOf(',')
-      resolve({
-        base64: result.slice(commaIdx + 1),
-        dataUrl: result,
-        mimeType: file.type || 'image/jpeg',
-      })
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
+const MAX_SIZE = 10 * 1024 * 1024;
 
 export default function UploadZone({ onResult, onError, onScanStart, onRequireAuth }) {
-  const [dragging, setDragging] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [preview, setPreview] = useState(null)
-  const fileInputRef = useRef(null)
-  const cameraInputRef = useRef(null)
+  const { theme } = useTheme();
+  const [loading, setLoading] = useState(false);
+  const [preview, setPreview] = useState(null);
 
-  async function handleFile(file) {
-    if (!onRequireAuth()) return
-    if (!file) return
-    if (!ACCEPTED.includes(file.type)) {
-      onError('Please upload a JPG or PNG image.')
-      return
-    }
-    if (file.size > MAX_SIZE) {
-      onError('Image is too large. Please use an image under 10MB.')
-      return
-    }
-
+  async function handleImage(base64, mimeType, uri) {
+    if (!onRequireAuth()) return;
+    setPreview(uri);
+    setLoading(true);
+    onScanStart();
     try {
-      const { base64, dataUrl, mimeType } = await fileToBase64(file)
-      setPreview(dataUrl)
-      setLoading(true)
-      onScanStart()
-      const result = await onResult(base64, mimeType)
-      setLoading(false)
-      return result
+      await onResult(base64, mimeType);
     } catch (err) {
-      setLoading(false)
-      onError(err.message || 'Failed to process the image.')
+      onError(err.message || 'Failed to process the image.');
+    } finally {
+      setLoading(false);
     }
   }
 
-  function handleDrop(e) {
-    e.preventDefault()
-    setDragging(false)
-    if (!onRequireAuth()) return
-    const file = e.dataTransfer.files[0]
-    if (file) handleFile(file)
+  async function pickFromGallery() {
+    if (!onRequireAuth()) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      onError('Permission to access photos is required.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      base64: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    handleImage(asset.base64, asset.mimeType || 'image/jpeg', asset.uri);
   }
 
-  function handleDragOver(e) {
-    e.preventDefault()
-    setDragging(true)
-  }
-
-  function handleDragLeave(e) {
-    e.preventDefault()
-    setDragging(false)
+  async function takePhoto() {
+    if (!onRequireAuth()) return;
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      onError('Permission to access the camera is required.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.8,
+      base64: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    handleImage(asset.base64, asset.mimeType || 'image/jpeg', asset.uri);
   }
 
   function clearPreview() {
-    setPreview(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-    if (cameraInputRef.current) cameraInputRef.current.value = ''
+    setPreview(null);
+  }
+
+  if (preview) {
+    return (
+      <View style={[styles.previewContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <Image source={{ uri: preview }} style={styles.previewImage} resizeMode="contain" />
+        {loading && (
+          <View style={styles.loadingOverlay}>
+            <View style={styles.loadingBox}>
+              <ActivityIndicator size="large" color={theme.primary} />
+              <Text style={[styles.loadingText, { color: theme.text }]}>
+                Analyzing your image with AI...
+              </Text>
+            </View>
+          </View>
+        )}
+        {!loading && (
+          <TouchableOpacity style={styles.clearButton} onPress={clearPreview}>
+            <Ionicons name="close" size={20} color="#FFF" />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
   }
 
   return (
-    <div className="w-full">
-      {!preview ? (
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          className={`relative border-2 border-dashed rounded-2xl p-8 sm:p-12 text-center transition-all duration-300 ${
-            dragging
-              ? 'border-blue-500 bg-blue-50 scale-[1.01]'
-              : 'border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50/50'
-          }`}
-        >
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center">
-              <ImageIcon size={32} className="text-blue-600" />
-            </div>
-            <div>
-              <p className="text-lg font-semibold text-slate-900">
-                Upload your lecture notes or textbook page
-              </p>
-              <p className="text-sm text-slate-500 mt-1">
-                Drag &amp; drop or click below. JPG and PNG supported.
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3 mt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (onRequireAuth()) fileInputRef.current?.click()
-                }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors shadow-sm"
-              >
-                <UploadCloud size={18} />
-                Choose File
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (onRequireAuth()) cameraInputRef.current?.click()
-                }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-medium hover:bg-slate-200 transition-colors"
-              >
-                <Camera size={18} />
-                Take Photo
-              </button>
-            </div>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPTED.join(',')}
-            className="hidden"
-            onChange={(e) => handleFile(e.target.files[0])}
-          />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept={ACCEPTED.join(',')}
-            capture="environment"
-            className="hidden"
-            onChange={(e) => handleFile(e.target.files[0])}
-          />
-        </div>
-      ) : (
-        <div className="relative rounded-2xl overflow-hidden bg-white border border-slate-200">
-          <div className="relative">
-            <img
-              src={preview}
-              alt="Uploaded study material"
-              className="w-full max-h-[400px] object-contain bg-slate-50"
-            />
-            {!loading && (
-              <button
-                onClick={clearPreview}
-                className="absolute top-3 right-3 p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
-                aria-label="Remove image"
-              >
-                <X size={18} />
-              </button>
-            )}
-            {loading && (
-              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center">
-                  <Loader2 size={28} className="text-white animate-spin" />
-                </div>
-                <p className="text-white font-medium flex items-center gap-2">
-                  <Sparkles size={16} />
-                  Analyzing your image with AI...
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+    <View style={[styles.uploadZone, { borderColor: theme.border, backgroundColor: theme.card }]}>
+      <View style={styles.uploadContent}>
+        <View style={[styles.iconCircle, { backgroundColor: theme.primaryLight }]}>
+          <Ionicons name="image-outline" size={32} color={theme.primary} />
+        </View>
+        <Text style={[styles.uploadTitle, { color: theme.text }]}>
+          Upload your lecture notes or textbook page
+        </Text>
+        <Text style={[styles.uploadSubtitle, { color: theme.textSecondary }]}>
+          Take a photo or choose from gallery. JPG and PNG supported.
+        </Text>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={[styles.primaryButton, { backgroundColor: theme.primary }]}
+            onPress={pickFromGallery}
+          >
+            <Ionicons name="cloud-upload-outline" size={18} color="#FFF" />
+            <Text style={styles.primaryButtonText}>Choose File</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.secondaryButton, { backgroundColor: theme.primaryLight }]}
+            onPress={takePhoto}
+          >
+            <Ionicons name="camera-outline" size={18} color={theme.primary} />
+            <Text style={[styles.secondaryButtonText, { color: theme.primary }]}>Take Photo</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  uploadZone: {
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+  },
+  uploadContent: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  uploadSubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  primaryButtonText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  previewContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  previewImage: {
+    width: '100%',
+    height: 350,
+    backgroundColor: '#F1F5F9',
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingBox: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  clearButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 8,
+    padding: 8,
+  },
+});
